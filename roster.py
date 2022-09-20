@@ -4,20 +4,6 @@ from openpyxl import load_workbook
 import tempfile
 
 class Roster(object):
-    """ Build this class.
-    """
-
-    # Probable data mapping:
-    #    Roster: { [Student Name] -> Workbook:[row number] }
-    #    Roster: { [Student Name] -> Workbook:[Worksheet name] }
-    #    Roster: { [Student Name] -> { Roster:[Assignment number] -> [Grade] } }
-    # 
-    # Possible data mapping:
-    #    Roster: { [Heading Name] -> Workbook:[Column Letter] }
-    #    Roster: { [Student Name] -> [ID] }
-    #    Roster: { [Student Name] -> [Class Grade formula] }
-    
-
 
     def __init__(self, filename):
         self.__recalc_required__ = True
@@ -27,7 +13,6 @@ class Roster(object):
     def __save_tmp_reload__(self):
         tmp_xls = tempfile.NamedTemporaryFile(suffix=self.file_extension).name
 
-        print("tmp_xls: " + str(tmp_xls))
         self.wb.save(tmp_xls)
         self.wb.close()
 
@@ -53,16 +38,9 @@ class Roster(object):
 
 
 
+    ###########################################################################
+    # Build names of students from the excel workbook main worksheet ("Roster")
     def build_student_names(self):
-    # Get names of students from the excel workbook main worksheet ("Roster")
-    # Row 1: Headers
-    # Col A: ID, numbered sequentially starting at ID == 1
-    # Col B: First Name
-    # Col C: Last name
-    # Col D: Class Grade average computed from each sheet, assuming that sheets are named ==
-    # Student_[ID]
-
-    # Returns: List of student names in the format "[First Name][space][Last Name]"
 
         self.student_names = []
 
@@ -72,8 +50,6 @@ class Roster(object):
             first_name = self.df_roster["First Name"][index]
             last_name = self.df_roster["Last Name"][index]
 
-            print("build_student_names: first_name: " + str(first_name))
-            print("build_student_names: last_name: " + str(last_name))
 
             full_name = str(first_name) + " " + str(last_name)
 
@@ -83,21 +59,24 @@ class Roster(object):
 
             index += 1
 
+    ###############################################################################
+    # Returns: List of student names in the format "[First Name][space][Last Name]"
     def get_student_names(self):
         return self.student_names
 
 
-    def get_student(self, student_name):
+    ######################################################
     # Return a dict where key -> value correspondences are
     # "id" -> [Integer ID]
     # "grades" -> [Grades as a <pandas.Series>]
     # student["grades"][[assignment number]] == [Integer grade on that assignment]
+
+    def get_student(self, student_name):
         student_info = {}
         df_index = self.name_to_df_index[student_name]
         student_info["id"] = int(self.df_roster["ID"][df_index])
 
         worksheet = "Student_" + str(student_info["id"])
-        print("worksheet is " + worksheet)
 
         sheet = self.wb[worksheet]
 
@@ -116,14 +95,15 @@ class Roster(object):
         return student_info
     
 
-    def class_average(self):
+    ##################################################################################
     # Return the average of each students grade average from the current, updated data
     # Original/pre-update data from the "Roster" sheet, "Class Grade" column
+
+    def class_average(self):
 
         if self.__recalc_required__:
             self.__save_tmp_reload__()
 
-        print("Student names post reset: " + str(self.get_student_names()))
         
         grade_total = 0
         index = 0
@@ -131,20 +111,23 @@ class Roster(object):
             grade = self.df_roster_data["Class Grade"][index]
             index += 1
 
-            print("Grade == " + str(grade))
             grade_total += grade
 
-        print("grade_total: " + str(grade_total))
 
         self.class_average_grade = grade_total / index
 
         return self.class_average_grade
 
 
-    def save(self, file_path):
+    #######################################################
     # Save the updated data to a workbook named [file_path]
+
+    def save(self, file_path):
         self.wb.save(file_path)
 
+
+    #################################################################
+    # Renumber the ID's from start_row upward by the change_by amount
 
     def __renumber__(self, start_row, change_by):
         row_x = start_row
@@ -167,15 +150,6 @@ class Roster(object):
 
             new_formula = old_formula.replace(old_sheet, new_sheet)
 
-            print("first name: " + str(first_name))
-            print("old_sheet: " + str(old_sheet))
-            print("new_sheet: " + str(new_sheet))
-
-            print("new id: " + str(sheet.cell(row=row_x, column=id_col_x).value))
-
-            print("old_formula: " + str(old_formula))
-            print("new_formula: " + str(new_formula))
-
             sheet.cell(row=row_x, column=formula_col_x).value = new_formula
 
             indiv_sheet = self.wb[old_sheet]
@@ -191,16 +165,12 @@ class Roster(object):
 
 
 
-    def delete_student(self, student_name, renumber=True):
+    ###################################################################################################
     # Delete student_name [[First Name][space][Last Name]] from the updated / class-state workbook data
-    # Initial pass at sequence of steps:
-    #    (1) Delete row
-    #    (2) Delete the worksheet corresponding to the deleted student
-    #
-    #    (3) If "renumber" argument is true
-    #            Decrement, by 1, all higher ID numbers than that deleted
-    #            Update (grade) formulas so source worksheet name uses new ID suffix if changed
-    #            Decrement the ID part of worksheet names ( Student_[ID] ).
+    # If the renumber argument is true, renumber the ID's and dependent names (worksheets and formulas
+    # using worksheet names) so they remain consecutive.
+
+    def delete_student(self, student_name, renumber=True):
 
 
         roster_sheet = self.wb["Roster"]
@@ -209,7 +179,6 @@ class Roster(object):
         roster_sheet.delete_rows(idx=sheet_row, amount=1)
 
         old_end_row = len(self.df_roster) + 1
-        print("Deleting old end row: " + str(old_end_row))
         roster_sheet.delete_rows(idx=old_end_row, amount=1)
 
         student_info = self.get_student(student_name)
@@ -217,14 +186,6 @@ class Roster(object):
         worksheet_name = "Student_" + str(id)
         worksheet = self.wb[worksheet_name]
         self.wb.remove(worksheet)
-
-        # data = self.wb["Roster"].values
-        # cols = next(data)
-        # self.df_roster = pd.DataFrame(data, columns=cols)
-
-        # self.wb_data = None
-        # self.df_roster_data = None
-        # self.__recalc_required__ = True
 
         self.student_names.remove(student_name)
 
@@ -243,13 +204,3 @@ class Roster(object):
         self.__recalc_required__ = True
 
         self.build_student_names()
-
-
-
-
-    def add_student(self, student):
-    # Optional?
-    # Analagous to delete_student(), exceptions include:
-    #     New students worksheet should be added before "Roster" sheet is updated
-    #     Assumption: After current students
-        pass
