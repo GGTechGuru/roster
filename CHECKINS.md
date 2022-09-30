@@ -3,4 +3,4 @@ Note: 2022/09/19 23:19 PM:  Added new_test.py without the 'with Roster...) as r:
 
 More stuff for git pract.
 
-Yet more stuff for git practice.
+Different stuff for git pract.
